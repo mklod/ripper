@@ -1,0 +1,6 @@
+# Ripper Python dependencies
+# Install with: pip install --upgrade -r requirements.txt
+# (Always run with --upgrade -- yt-dlp/gallery-dl break when sites change and
+#  need frequent updates.)
+yt-dlp
+gallery-dl

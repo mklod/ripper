@@ -1,0 +1,16 @@
+# Runtime state never belongs in the repo
+ripper_config.json
+_cookies_merged.txt
+
+# Secrets -- never commit exported cookies
+*cookies*.txt
+*.cookies
+
+# Python
+__pycache__/
+*.pyc
+
+# Downloads / scratch
+_test/
+*.part
+*.ytdl
