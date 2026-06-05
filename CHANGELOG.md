@@ -15,13 +15,13 @@
 
 > [!warning] Testing Checklist
 > - [ ] `install.ps1` runs clean on a fresh-ish machine (deps install, shortcut appears, app launches)
->   - Notes:
-> - [ ] App launches from the deployed local copy and writes config to `%LOCALAPPDATA%\Ripper`
->   - Notes:
-> - [ ] Merged cookies temp file is created under `%LOCALAPPDATA%\Ripper`, not the NAS
->   - Notes:
-> - [ ] Live auth test: 1 YouTube + 1 Instagram link with real cookies -> files land
->   - Notes:
+>   - Notes: not yet run on a second machine
+> - [x] App launches from the deployed local copy and writes config to `%LOCALAPPDATA%\Ripper`
+>   - Notes: verified 2026-06-05
+> - [x] Merged cookies temp file is created under `%LOCALAPPDATA%\Ripper`, not the NAS
+>   - Notes: verified 2026-06-05
+> - [x] Live auth test: YouTube + Instagram with real cookies -> files land
+>   - Notes: verified by user 2026-06-05 with live authenticated rips
 
 ## Build 2026-05-27--1700
 

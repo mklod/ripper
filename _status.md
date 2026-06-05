@@ -23,9 +23,13 @@ locally, project home established on NAS with full docs.
 - Quality toggle: best (default) vs forced 1080p H.264 MP4, never re-encodes.
 
 ## Next immediate task
-- Live end-to-end auth test: rip one YouTube + one Instagram item with real
-  cookies loaded, confirm files land. (Pipeline verified with a public video;
-  authenticated path not yet user-verified.)
+- None outstanding. v1 verified end-to-end. Optional future work in WORKPLAN
+  (per-collection subfolders, MP3 mode, concurrent downloads).
+
+## Verification (2026-06-05)
+- Live authenticated rips confirmed by user: YouTube + Instagram with real
+  cookies.txt loaded -> files downloaded successfully. App is working in
+  production use.
 
 ## Blockers
 - None. Downloads require user-supplied `cookies.txt` (by design).

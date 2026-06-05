@@ -35,8 +35,9 @@ quality toggle with a strict no-re-encode guarantee.
 NAS project home, runtime secrets relocated to %LOCALAPPDATA%, README +
 installer + tracking docs, git repo.
 
-### Stage 4 -- Verification -- TODO
-Live authenticated end-to-end test (YouTube + Instagram with real cookies).
+### Stage 4 -- Verification -- COMPLETE
+Live authenticated end-to-end test passed 2026-06-05: YouTube + Instagram rips
+with real cookies produced files.
 
 ### Possible future -- TODO (not committed)
 - Per-collection subfolder output so big IG collections don't dump flat.
