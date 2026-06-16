@@ -48,3 +48,13 @@ locally, project home established on NAS with full docs.
 NAS `L:\PROJECTS\ripper` is authoritative. After editing there, redeploy local:
 `Copy-Item L:\PROJECTS\ripper\ripper.pyw,L:\PROJECTS\ripper\ripper.ico C:\Users\mklod\Ripper\ -Force`
 (or just re-run `install.ps1`).
+
+## Maintenance (2026-06-16--0209) — YouTube broke; updated yt-dlp
+- Symptom: YouTube rips failed — nsig extraction failed + "forcing SABR streaming"
+  + "Only images are available" -> "Requested format is not available".
+- Root cause: yt-dlp was 2025.05.22 (~13 months stale) vs YouTube's current player.
+  (The stale-cookie warning was secondary — public videos work without cookies.)
+- Fix: `python -m pip install -U yt-dlp gallery-dl` -> yt-dlp 2026.06.09,
+  gallery-dl 1.32.3. Verified: watch?v=TXtqhP3aA9M downloaded (4K, 558MB webm), no cookies.
+- Recurring issue: YouTube breaks yt-dlp periodically; fix is always `pip install -U yt-dlp`.
+  Candidate: add the "Update deps" button from WORKPLAN so this is self-serve.
