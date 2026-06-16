@@ -4,6 +4,31 @@
 > [!tip] Queued for next build
 > - (empty)
 
+## Build 2026-06-16--0220
+
+### Changes
+- **Maintenance:** updated yt-dlp 2025.05.22 -> 2026.06.09 + gallery-dl -> 1.32.3,
+  fixing YouTube failures (nsig extraction / forced SABR / "only images available").
+- **Update button:** "Update yt-dlp / gallery-dl" (bottom-right) streams
+  `pip install -U yt-dlp gallery-dl` into the log and prints the new versions —
+  self-serve fix for the recurring YouTube-breakage.
+- **Rip/Cancel moved** to the right of the paste box (act right after pasting).
+- **Copy log** button (copies the log to the clipboard).
+- **Aligned** the Save-to entry and Cookie-files listbox (uniform label + button
+  widths); **removed** the Open button next to Save to.
+
+> [!warning] Testing Checklist
+> - [ ] Rip a YouTube link end-to-end (best quality) -> file lands in Save-to
+>   - Notes:
+> - [ ] "Update yt-dlp / gallery-dl" runs, streams pip output, prints versions, re-enables
+>   - Notes:
+> - [ ] "Copy log" puts the log text on the clipboard
+>   - Notes:
+> - [ ] Save-to entry and Cookie-files box visibly line up; no Open button
+>   - Notes:
+> - [ ] Rip + Cancel sit beside the paste box; Cancel works mid-rip
+>   - Notes:
+
 ## Build 2026-06-05--0149
 
 ### Changes
