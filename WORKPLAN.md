@@ -43,4 +43,7 @@ with real cookies produced files.
 - Per-collection subfolder output so big IG collections don't dump flat.
 - Optional MP3 audio-only mode for YouTube.
 - Concurrent downloads (currently sequential).
-- Auto-update deps button.
+- ~~Auto-update deps button.~~ DONE 2026-06-16 ("Update yt-dlp / gallery-dl").
+- **`--cookies-from-browser firefox` option** (deferred 2026-06-16) -- live,
+  always-fresh YouTube cookies, sidesteps the rotate/re-export cycle. Firefox only
+  (Chrome's DB lock + App-Bound Encryption is why browser-cookies were dropped).

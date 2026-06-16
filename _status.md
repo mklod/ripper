@@ -58,3 +58,15 @@ NAS `L:\PROJECTS\ripper` is authoritative. After editing there, redeploy local:
   gallery-dl 1.32.3. Verified: watch?v=TXtqhP3aA9M downloaded (4K, 558MB webm), no cookies.
 - Recurring issue: YouTube breaks yt-dlp periodically; fix is always `pip install -U yt-dlp`.
   Candidate: add the "Update deps" button from WORKPLAN so this is self-serve.
+
+## Issue logged (2026-06-16) — YouTube bot-gate / cookie rotation
+- Some YouTube videos are bot-gated: "Sign in to confirm you're not a bot" — they
+  fail even with NO cookies (verified). They REQUIRE a valid signed-in session.
+- Root pain: YouTube rotates session cookies whenever the logged-in browser loads
+  a YouTube page, so a normally-exported cookies.txt goes stale fast ("cookies are
+  no longer valid").
+- Fix (works): re-export via INCOGNITO method — private window, log in, open a new
+  tab to youtube.com/robots.txt, export, close the window immediately. Documented
+  in README (Cookies section + troubleshooting row).
+- Deferred (user: "drop it for now"): a `--cookies-from-browser firefox` option for
+  always-fresh cookies. Logged in WORKPLAN possible-future.
