@@ -1,5 +1,5 @@
 # Ripper - one-click link downloader (yt-dlp + gallery-dl)
-# Last modified: 2026-06-05--0149
+# Last modified: 2026-06-16--0220
 #
 # Paste one or many links, click Rip. Instagram URLs route to gallery-dl
 # (handles reels, photos, carousels, profiles, stories); everything else
@@ -79,25 +79,40 @@ class RipperApp:
 
         pad = dict(padx=10, pady=6)
 
+        # Uniform widths so the path entry and cookie listbox line up on both edges.
+        LABEL_W = 13
+        BTN_W = 8
+
         ttk.Label(root, text="Paste links (one per line):").pack(anchor="w", **pad)
-        self.urls = tk.Text(root, height=7, wrap="none", font=("Consolas", 10))
-        self.urls.pack(fill="x", padx=10)
+
+        # --- links + Rip/Cancel (Rip sits right next to the paste box) ---
+        links_row = ttk.Frame(root)
+        links_row.pack(fill="x", padx=10)
+        self.urls = tk.Text(links_row, height=7, wrap="none", font=("Consolas", 10))
+        self.urls.pack(side="left", fill="both", expand=True)
+        rip_col = ttk.Frame(links_row)
+        rip_col.pack(side="left", fill="y", padx=(6, 0))
+        self.rip_btn = ttk.Button(rip_col, text="Rip", command=self.start, width=BTN_W)
+        self.rip_btn.pack(fill="x", ipady=10)
+        self.cancel_btn = ttk.Button(rip_col, text="Cancel", command=self.cancel,
+                                     state="disabled", width=BTN_W)
+        self.cancel_btn.pack(fill="x", pady=(4, 0), ipady=2)
 
         # --- output folder row ---
         out_row = ttk.Frame(root)
         out_row.pack(fill="x", **pad)
-        ttk.Label(out_row, text="Save to:").pack(side="left")
+        ttk.Label(out_row, text="Save to:", width=LABEL_W, anchor="w").pack(side="left")
         self.out_var = tk.StringVar(value=self.cfg.get("outdir", DEFAULT_OUT))
         self.out_entry = ttk.Entry(out_row, textvariable=self.out_var)
         self.out_entry.pack(side="left", fill="x", expand=True, padx=6)
-        ttk.Button(out_row, text="Browse", command=self.pick_folder).pack(side="left")
-        ttk.Button(out_row, text="Open", command=self.open_folder).pack(
-            side="left", padx=(6, 0))
+        ttk.Button(out_row, text="Browse", width=BTN_W,
+                   command=self.pick_folder).pack(side="left")
 
         # --- cookies files (multi) ---
         ck_row = ttk.Frame(root)
         ck_row.pack(fill="x", padx=10, pady=(0, 6))
-        ttk.Label(ck_row, text="Cookie files:").pack(side="left", anchor="n", pady=(2, 0))
+        ttk.Label(ck_row, text="Cookie files:", width=LABEL_W, anchor="nw").pack(
+            side="left", anchor="n", pady=(2, 0))
         lb_wrap = ttk.Frame(ck_row)
         lb_wrap.pack(side="left", fill="x", expand=True, padx=6)
         self.cookie_lb = tk.Listbox(lb_wrap, height=3, selectmode="extended",
@@ -111,8 +126,8 @@ class RipperApp:
                 self.cookie_lb.insert("end", f)
         ck_btns = ttk.Frame(ck_row)
         ck_btns.pack(side="left")
-        ttk.Button(ck_btns, text="Add", command=self.add_cookies, width=8).pack(fill="x")
-        ttk.Button(ck_btns, text="Remove", command=self.remove_cookies, width=8).pack(
+        ttk.Button(ck_btns, text="Add", command=self.add_cookies, width=BTN_W).pack(fill="x")
+        ttk.Button(ck_btns, text="Remove", command=self.remove_cookies, width=BTN_W).pack(
             fill="x", pady=(2, 0))
 
         # --- quality toggle (read fresh at every Rip click) ---
@@ -124,15 +139,15 @@ class RipperApp:
             text="Force 1080p H.264 MP4  (no re-encode; off = best available)"
         ).pack(side="left")
 
-        # --- action buttons ---
+        # --- utility buttons ---
         btn_row = ttk.Frame(root)
         btn_row.pack(fill="x", **pad)
-        self.rip_btn = ttk.Button(btn_row, text="Rip", command=self.start)
-        self.rip_btn.pack(side="left", ipadx=20, ipady=4)
-        self.cancel_btn = ttk.Button(btn_row, text="Cancel", command=self.cancel,
-                                     state="disabled")
-        self.cancel_btn.pack(side="left", padx=8, ipady=4)
         ttk.Button(btn_row, text="Clear log", command=self.clear_log).pack(side="left")
+        ttk.Button(btn_row, text="Copy log", command=self.copy_log).pack(
+            side="left", padx=8)
+        self.update_btn = ttk.Button(btn_row, text="Update yt-dlp / gallery-dl",
+                                     command=self.update_deps)
+        self.update_btn.pack(side="right")
 
         # --- log ---
         log_frame = ttk.Frame(root)
@@ -188,10 +203,45 @@ class RipperApp:
         if d:
             self.out_var.set(d)
 
-    def open_folder(self):
-        d = self.out_var.get()
-        Path(d).mkdir(parents=True, exist_ok=True)
-        os.startfile(d)
+    def copy_log(self):
+        text = self.log.get("1.0", "end-1c")
+        self.root.clipboard_clear()
+        self.root.clipboard_append(text)
+        self.set_status("Log copied to clipboard")
+
+    # ---------- dependency update ----------
+    def update_deps(self):
+        """Update yt-dlp + gallery-dl (they break when sites change). Streams the
+        pip output into the log; disables Rip/Update while it runs."""
+        self.update_btn.configure(state="disabled")
+        self.rip_btn.configure(state="disabled")
+        self.write("\n=== Updating yt-dlp + gallery-dl ===\n", "info")
+        self.set_status("Updating dependencies...")
+        threading.Thread(target=self._update_worker, daemon=True).start()
+
+    def _update_worker(self):
+        cmd = [sys.executable, "-m", "pip", "install", "-U", "yt-dlp", "gallery-dl"]
+        try:
+            rc = self.run_one(cmd)
+        except Exception as e:
+            self.write(f"  error: {e}\n", "err")
+            rc = -1
+        if rc == 0:
+            self.write("  updated.\n", "ok")
+            for mod, label in (("yt_dlp", "yt-dlp"), ("gallery_dl", "gallery-dl")):
+                try:
+                    out = subprocess.run(
+                        [sys.executable, "-m", mod, "--version"],
+                        capture_output=True, text=True, creationflags=NO_WINDOW)
+                    ver = (out.stdout or "").strip().splitlines()[0]
+                    self.write(f"  {label}: {ver}\n", "ok")
+                except Exception:
+                    pass
+            self.set_status("Dependencies updated")
+        else:
+            self.write(f"  update failed (exit {rc})\n", "err")
+            self.set_status("Dependency update failed")
+        self.root.after(0, self.reset_buttons)
 
     def add_cookies(self):
         files = filedialog.askopenfilenames(
@@ -253,6 +303,7 @@ class RipperApp:
 
         self.cancelled = False
         self.rip_btn.configure(state="disabled")
+        self.update_btn.configure(state="disabled")
         self.cancel_btn.configure(state="normal")
         mode = "1080p mp4" if self.force_mp4_var.get() else "best quality"
         self.write(f"\n=== Ripping {len(links)} link(s) -> {outdir}  [{mode}] ===\n",
@@ -350,6 +401,7 @@ class RipperApp:
 
     def reset_buttons(self):
         self.rip_btn.configure(state="normal")
+        self.update_btn.configure(state="normal")
         self.cancel_btn.configure(state="disabled")
 
     def on_close(self):
