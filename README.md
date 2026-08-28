@@ -19,10 +19,11 @@ Single-file Python/Tkinter GUI. No build step, no server, no telemetry.
 - Paste a batch of links (one per line) and rip them in sequence.
 - **Multi-file cookie support** -- load an Instagram `cookies.txt` *and* a
   YouTube `cookies.txt` at the same time; they're merged at rip time.
-- **Quality toggle**, checked fresh on every Rip:
-  - *off* (default) -- best available quality (often VP9/AV1 `.webm`, up to 4K/8K).
-  - *on* -- force **1080p H.264 MP4** for maximum device compatibility.
-  - **Never re-encodes.** Merging is always a container remux, never a transcode.
+- **Kodi / Pi 5 mode** (on by default) -- takes the **best available quality up
+  to 4K** and re-encodes to **HEVC MP4** only when the Raspberry Pi 5 couldn't
+  hardware-decode the result. See [Kodi / Pi 5 mode](#kodi--pi-5-mode) below.
+- **Force 1080p H.264 MP4** toggle (off by default) -- escape hatch for
+  maximum-compatibility devices. Never re-encodes; remux only.
 - Right-click Cut / Copy / Paste / Select-all on the text fields.
 - Live download log, per-link progress, Cancel button.
 - Remembers your output folder, cookie files, and quality toggle between runs.
@@ -164,7 +165,63 @@ on a guest-readable network share.
   log via a thread-safe queue; the UI stays responsive and Cancel can terminate
   the live process.
 
-### The quality toggle, exactly
+### Kodi / Pi 5 mode
+
+The rips are aimed at a specific target: Kodi on a Raspberry Pi 5, reading from
+the NAS. That box constrains what's worth downloading.
+
+**The hardware fact everything follows from** (verified on the box 2026-08-27):
+the Pi 5's only hardware video decoder is `rpivid` at `/dev/video19`, and it
+advertises exactly one coded format:
+
+```
+[0]: 'S265' (HEVC Parsed Slice Data, compressed)
+```
+
+No H.264, no VP9, no AV1 -- those all fall back to CPU decoding. `kodi.log`
+shows it happening on every H.264 play:
+
+```
+Creating video codec with codec id: 27          <- H.264
+DRMPRIME::Open - using decoder V4L2 mem2mem H.264 decoder wrapper
+DRMPRIME::Open - unable to open codec           <- hardware refuses
+DRMPRIME::Open - using decoder H.264 / AVC ...  <- CPU fallback
+```
+
+Software decode is comfortable at 1080p and falls over at 4K. And YouTube never
+serves HEVC -- above 1080p it only offers AV1 and VP9. So **the only way to get
+4K onto that box is to re-encode it to HEVC.**
+
+So the rule keys on the hardware, not on the file extension:
+
+| Downloaded stream | What happens |
+|---|---|
+| HEVC, any resolution | kept as-is (hardware path) |
+| Anything `<=1080p` | kept as-is (CPU decode is fine; re-encoding would only lose quality) |
+| Anything else (4K AV1 / VP9 / H.264) | re-encoded to **HEVC MP4** |
+| Instagram (gallery-dl) | never touched |
+
+Audio is never re-encoded: AAC is preferred at format-selection time and copied
+straight across. HDR survives -- colour primaries/transfer/matrix are carried
+over and the encode switches to Main10 for PQ/HLG sources (`rpivid` advertises
+a 10-bit capture format, so HDR hardware-decodes too).
+
+Encoding uses **NVENC** where available (`hevc_nvenc`), falling back to
+`libx265`. Measured on an RTX 4070 SUPER against a 4K30 AV1 source: presets
+p4..p7 all produced the *same* output size, so the app uses `p5` at ~1.2x
+real-time. Decoding is not the bottleneck (software AV1 decode of the same clip
+ran ~187 fps), which is why there's no `-hwaccel` flag -- it was measured and
+made no difference.
+
+Downloads are capped at 2160p: the Pi's decoder tops out around 4K and the
+display is 4K, so an 8K rip would only burn disk and stall playback.
+
+**Verified end-to-end 2026-08-27:** a 4K AV1 YouTube rip was re-encoded to HEVC
+Main, copied to the NAS and played on the Pi -- playback advanced 12.1 s of
+video in 12.0 s of wall clock (1.01x, no dropped frames) and Kodi opened it on
+the DRMPRIME hardware path with no fallback line.
+
+### The 1080p toggle, exactly
 
 When **on**, yt-dlp gets:
 
@@ -173,9 +230,9 @@ When **on**, yt-dlp gets:
 --merge-output-format mp4
 ```
 
-Pre-encoded H.264 video + AAC audio at <=1080p, remuxed into MP4. There is no
-`--recode-video` anywhere in the app, so it never transcodes. If a site has no
-H.264 MP4 stream, that link errors rather than silently falling back to webm.
+Pre-encoded H.264 video + AAC audio at <=1080p, remuxed into MP4 -- no
+transcode. If a site has no H.264 MP4 stream, that link errors rather than
+silently falling back to webm.
 
 ---
 
@@ -186,7 +243,9 @@ H.264 MP4 stream, that link errors rather than silently falling back to webm.
 | "Video unavailable" / "user could not be found" | Anonymous block. Add a `cookies.txt`. |
 | "Sign in to confirm you're not a bot" / "cookies are no longer valid" | YouTube wants a valid login and your cookies have rotated/expired. Re-export via the **Incognito method** (see Cookies section) -- normal exports go stale fast. |
 | "Could not copy Chrome cookie database" | You're trying browser cookies -- not supported; export `cookies.txt` instead. |
-| Output is `.webm` and you wanted `.mp4` | Tick the **Force 1080p H.264 MP4** toggle. |
+| Output is `.webm` and you wanted `.mp4` | Shouldn't happen with **Kodi / Pi 5 mode** on -- it lands everything in MP4. If it's off, tick it (or the 1080p toggle). |
+| 4K rip stutters in Kodi on the Pi | It wasn't re-encoded -- check the log for a `-> HEVC` line. Only HEVC hardware-decodes on a Pi 5. |
+| Re-encode is slow | It runs ~1.2x real-time for 4K30 on an RTX 4070 SUPER; encoding is the bottleneck. Lower `HEVC_PRESET` (p5 -> p4) in `ripper.pyw` to trade a little quality for speed. |
 | yt-dlp fails on a site that used to work | Sites change constantly: `pip install -U yt-dlp gallery-dl`. |
 | "ffmpeg not found" in the log | Install ffmpeg and ensure it's on PATH. |
 

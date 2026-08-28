@@ -1,5 +1,5 @@
 # Ripper - one-click link downloader (yt-dlp + gallery-dl)
-# Last modified: 2026-06-16--0220
+# Last modified: 2026-08-27--2340
 #
 # Paste one or many links, click Rip. Instagram URLs route to gallery-dl
 # (handles reels, photos, carousels, profiles, stories); everything else
@@ -38,6 +38,39 @@ DEFAULT_OUT = str(Path.home() / "Downloads" / "Ripper")
 FORMAT_1080_MP4 = ("bv*[ext=mp4][vcodec^=avc1][height<=1080]+ba[ext=m4a]/"
                    "b[ext=mp4][vcodec^=avc1][height<=1080]")
 
+# Default: best available quality, capped at 4K. The cap is deliberate --
+# the Pi 5's hardware decoder tops out around 4K and the display is 4K, so an
+# 8K rip would only burn disk and stall playback. AAC audio is preferred at
+# selection time so the audio track never needs re-encoding downstream.
+FORMAT_BEST_4K = ("bv*[height<=2160]+ba[ext=m4a]/bv*[height<=2160]+ba/"
+                  "b[height<=2160]/bv*+ba/b")
+
+# --- Kodi / Raspberry Pi 5 compatibility ---------------------------------
+# Verified on the box (2026-08-27): the Pi 5's only hardware video decoder is
+# rpivid (/dev/video19) and it advertises exactly one coded format, 'S265'
+# (HEVC) -- with a 10-bit capture format (NC30) so HDR/Main10 is covered.
+# H.264, VP9 and AV1 all fall back to CPU decoding; kodi.log shows the V4L2
+# H.264 wrapper failing to open and handing off to software on every play.
+# Software decode is comfortable at 1080p and falls over at 4K. So the rule
+# keys on the hardware, not on the codec name: keep anything HEVC (hardware
+# path) and anything <=1080p (software path is fine, and re-encoding it would
+# only throw quality away); re-encode everything else. That covers 4K AV1/VP9
+# from YouTube and also 4K H.264 from other sites, which the Pi 5 can't
+# hardware-decode either.
+KEEP_CODECS = {"hevc", "h265"}   # the only codec rpivid will accept
+SW_SAFE_HEIGHT = 1080            # CPU decode is comfortable up to here
+HEVC_CQ = 21          # NVENC constant-quality target (lower = bigger/better)
+HEVC_CRF = 20         # libx265 fallback quality
+# Measured on the RTX 4070 SUPER over a 4K30 AV1 source (2026-08-27): presets
+# p4..p7 all produced the SAME output size (50.5 MB for a 20s slice) while
+# p7 took 21.6s and p4 13.2s -- the slower presets buy nothing here. p5 sits
+# at ~1.2x realtime for 4K30. Encoding is the bottleneck, not decoding
+# (software AV1 decode of the same clip runs ~187 fps), so there is no point
+# adding -hwaccel; it was measured and made no difference.
+HEVC_PRESET = "p5"
+HDR_TRANSFERS = {"smpte2084", "arib-std-b67"}
+LAST_FILES = STATE_DIR / "_last_files.txt"
+
 NO_WINDOW = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
 
 
@@ -72,6 +105,7 @@ class RipperApp:
         self.proc = None
         self.cancelled = False
         self.ffmpeg = shutil.which("ffmpeg")
+        self.hevc_encoder = self.pick_hevc_encoder()
 
         root.title("Ripper")
         root.geometry("680x720")
@@ -137,6 +171,14 @@ class RipperApp:
         ttk.Checkbutton(
             q_row, variable=self.force_mp4_var,
             text="Force 1080p H.264 MP4  (no re-encode; off = best available)"
+        ).pack(side="left")
+
+        k_row = ttk.Frame(root)
+        k_row.pack(fill="x", padx=10, pady=(0, 6))
+        self.kodi_var = tk.BooleanVar(value=self.cfg.get("kodi_hevc", True))
+        ttk.Checkbutton(
+            k_row, variable=self.kodi_var,
+            text="Kodi/Pi 5 mode: re-encode AV1 / VP9 -> HEVC MP4  (keeps 4K)"
         ).pack(side="left")
 
         # --- utility buttons ---
@@ -299,13 +341,19 @@ class RipperApp:
             "outdir": outdir,
             "cookie_files": list(self.cookie_lb.get(0, "end")),
             "force_1080_mp4": self.force_mp4_var.get(),
+            "kodi_hevc": self.kodi_var.get(),
         })
 
         self.cancelled = False
         self.rip_btn.configure(state="disabled")
         self.update_btn.configure(state="disabled")
         self.cancel_btn.configure(state="normal")
-        mode = "1080p mp4" if self.force_mp4_var.get() else "best quality"
+        if self.force_mp4_var.get():
+            mode = "1080p mp4"
+        elif self.kodi_var.get():
+            mode = f"best quality -> Kodi/Pi5 HEVC ({self.hevc_encoder})"
+        else:
+            mode = "best quality"
         self.write(f"\n=== Ripping {len(links)} link(s) -> {outdir}  [{mode}] ===\n",
                    "info")
 
@@ -353,6 +401,14 @@ class RipperApp:
                 cmd += ["--ffmpeg-location", self.ffmpeg]
             if self.force_mp4_var.get():
                 cmd += ["-f", FORMAT_1080_MP4, "--merge-output-format", "mp4"]
+            else:
+                # Best available (<=4K), landed in an mp4 container. --remux-video
+                # also catches single-file downloads that never hit the merger.
+                cmd += ["-f", FORMAT_BEST_4K,
+                        "--merge-output-format", "mp4",
+                        "--remux-video", "mp4"]
+            # Record the finished file(s) so the worker can post-process them.
+            cmd += ["--print-to-file", "after_move:%(filepath)s", str(LAST_FILES)]
             cmd += cookies
         cmd.append(url)
         return cmd
@@ -366,11 +422,14 @@ class RipperApp:
             self.write(f"\n[{i}/{len(links)}] {backend}: {url}\n", "info")
             self.set_status(f"[{i}/{len(links)}] downloading...")
             try:
+                LAST_FILES.unlink(missing_ok=True)
                 rc = self.run_one(self.build_cmd(url, outdir))
             except Exception as e:
                 self.write(f"  error: {e}\n", "err")
                 rc = -1
             if rc == 0:
+                if backend == "yt-dlp" and self.kodi_var.get() and not self.cancelled:
+                    self.kodi_pass()
                 ok += 1
                 self.write("  done\n", "ok")
             else:
@@ -382,6 +441,128 @@ class RipperApp:
         self.write(f"\n=== {summary} ===\n", "ok" if fail == 0 else "err")
         self.set_status(summary)
         self.root.after(0, self.reset_buttons)
+
+    # ---------- Kodi / Pi 5 compatibility pass ----------
+    def pick_hevc_encoder(self):
+        """NVENC if this machine has it (near-free on a modern GPU), else x265."""
+        try:
+            out = subprocess.run([self.ffmpeg or "ffmpeg", "-hide_banner", "-encoders"],
+                                 capture_output=True, text=True,
+                                 creationflags=NO_WINDOW).stdout or ""
+        except Exception:
+            return "libx265"
+        return "hevc_nvenc" if "hevc_nvenc" in out else "libx265"
+
+    def probe(self, path):
+        """Read the stream properties we need to decide on (and configure) a
+        re-encode. Returns None if ffprobe isn't usable."""
+        probe_bin = "ffprobe"
+        if self.ffmpeg:
+            cand = Path(self.ffmpeg).with_name("ffprobe.exe" if os.name == "nt"
+                                               else "ffprobe")
+            if cand.is_file():
+                probe_bin = str(cand)
+        fields = ("stream=codec_name,codec_type,height,"
+                  "color_transfer,color_primaries,color_space")
+        try:
+            out = subprocess.run(
+                [probe_bin, "-v", "error", "-show_entries", fields,
+                 "-of", "json", str(path)],
+                capture_output=True, text=True, creationflags=NO_WINDOW)
+            data = json.loads(out.stdout or "{}")
+        except Exception as e:
+            self.write(f"  ffprobe failed ({e}); leaving file as-is\n", "err")
+            return None
+        info = {"vcodec": "", "acodec": "", "height": 0,
+                "trc": "", "prim": "", "space": ""}
+        for st in data.get("streams", []):
+            if st.get("codec_type") == "video" and not info["vcodec"]:
+                info["vcodec"] = (st.get("codec_name") or "").lower()
+                info["height"] = int(st.get("height") or 0)
+                info["trc"] = (st.get("color_transfer") or "").lower()
+                info["prim"] = (st.get("color_primaries") or "").lower()
+                info["space"] = (st.get("color_space") or "").lower()
+            elif st.get("codec_type") == "audio" and not info["acodec"]:
+                info["acodec"] = (st.get("codec_name") or "").lower()
+        return info
+
+    def transcode_cmd(self, src, dst, info):
+        """AV1/VP9 -> HEVC, video only. Audio is copied when it's already AAC.
+        Colour tags are carried across so HDR still flags as HDR in Kodi."""
+        hdr = info["trc"] in HDR_TRANSFERS
+        cmd = [self.ffmpeg or "ffmpeg", "-y", "-hide_banner",
+               "-loglevel", "warning", "-stats", "-stats_period", "2",
+               "-i", str(src), "-map", "0:v:0", "-map", "0:a:0?",
+               "-c:v", self.hevc_encoder]
+        if self.hevc_encoder == "hevc_nvenc":
+            cmd += ["-preset", HEVC_PRESET, "-tune", "hq", "-rc", "vbr",
+                    "-cq", str(HEVC_CQ), "-b:v", "0",
+                    "-profile:v", "main10" if hdr else "main",
+                    "-pix_fmt", "p010le" if hdr else "yuv420p"]
+        else:
+            cmd += ["-preset", "medium", "-crf", str(HEVC_CRF),
+                    "-profile:v", "main10" if hdr else "main",
+                    "-pix_fmt", "yuv420p10le" if hdr else "yuv420p"]
+        for flag, val in (("-color_primaries", info["prim"]),
+                          ("-color_trc", info["trc"]),
+                          ("-colorspace", info["space"])):
+            if val and val not in ("unknown", "reserved"):
+                cmd += [flag, val]
+        if info["acodec"] == "aac":
+            cmd += ["-c:a", "copy"]
+        else:
+            cmd += ["-c:a", "aac", "-b:a", "192k"]
+        cmd += ["-tag:v", "hvc1", "-movflags", "+faststart", str(dst)]
+        return cmd
+
+    def kodi_pass(self):
+        """Re-encode anything the Pi 5 can't hardware-decode. Reads the file
+        list yt-dlp just wrote; H.264/HEVC are left untouched."""
+        try:
+            paths = [ln.strip() for ln in
+                     LAST_FILES.read_text(encoding="utf-8", errors="replace").splitlines()
+                     if ln.strip()]
+        except Exception:
+            return
+        for raw in paths:
+            src = Path(raw)
+            if self.cancelled or not src.is_file():
+                continue
+            info = self.probe(src)
+            if not info:
+                continue
+            if (info["vcodec"] in KEEP_CODECS
+                    or info["height"] <= SW_SAFE_HEIGHT):
+                why = ("hardware-decoded" if info["vcodec"] in KEEP_CODECS
+                       else "software-decodes fine")
+                self.write(f"  {info['vcodec']} {info['height']}p - {why}, "
+                           f"no re-encode\n", "ok")
+                continue
+            hdr = " HDR" if info["trc"] in HDR_TRANSFERS else ""
+            self.write(f"  {info['vcodec']} {info['height']}p{hdr} -> HEVC "
+                       f"({self.hevc_encoder})...\n", "info")
+            self.set_status(f"re-encoding {src.name} -> HEVC...")
+            tmp = src.with_name(src.stem + ".__hevc.mp4")
+            final = src.with_suffix(".mp4")
+            try:
+                rc = self.run_one(self.transcode_cmd(src, tmp, info))
+            except Exception as e:
+                self.write(f"  re-encode error: {e}\n", "err")
+                rc = -1
+            if rc != 0 or not tmp.is_file():
+                self.write("  re-encode failed - keeping the original file\n", "err")
+                try:
+                    tmp.unlink(missing_ok=True)
+                except Exception:
+                    pass
+                continue
+            try:
+                src.unlink()
+                os.replace(tmp, final)
+                self.write(f"  -> {final.name}\n", "ok")
+            except Exception as e:
+                self.write(f"  could not replace original ({e}); "
+                           f"re-encode left at {tmp.name}\n", "err")
 
     def run_one(self, cmd):
         self.proc = subprocess.Popen(

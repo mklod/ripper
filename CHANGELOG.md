@@ -4,6 +4,50 @@
 > [!tip] Queued for next build
 > - (empty)
 
+## Build 2026-08-27--2340
+
+### Changes
+- **Kodi/Pi 5 mode (new, on by default).** yt-dlp rips now take the **best
+  available quality up to 4K** and, if the result is something the Raspberry Pi 5
+  can't hardware-decode, re-encode it to **HEVC MP4** so it plays smoothly in
+  Kodi. Replaces the old "cap it at 1080p H.264" answer to the `.webm` problem.
+- **The rule keys on the hardware, not the file extension:** keep anything HEVC
+  (the Pi's only hardware-decoded codec) and anything <=1080p (CPU decode is
+  comfortable there, and re-encoding it would only throw quality away);
+  re-encode everything else. That covers 4K AV1/VP9 from YouTube *and* 4K H.264
+  from other sites, which the Pi 5 also can't hardware-decode.
+- **Instagram is untouched** -- gallery-dl rips never get probed or re-encoded,
+  so reels keep ripping exactly as before.
+- Default format selector is now best-<=4K with **AAC preferred at selection
+  time**, so the audio track is never re-encoded, and output lands in MP4
+  (`--merge-output-format mp4` + `--remux-video mp4`, which also catches
+  single-file downloads that never hit the merger).
+- HDR is preserved: colour primaries/transfer/matrix are carried across and the
+  encode switches to Main10 when the source is PQ/HLG.
+- Encoder is **NVENC when available**, falling back to libx265 on machines
+  without an NVIDIA GPU.
+- The old **Force 1080p H.264 MP4** toggle is kept as an escape hatch for
+  maximum-compatibility devices (off by default).
+
+### Why the `.webm` files were happening
+yt-dlp was already picking an *MP4-container* AV1 video stream; the file only
+landed as `.webm` because it paired it with Opus audio, which ships in a webm
+container. The extension was an audio-container artifact, not a bad video pick.
+
+> [!warning] Testing Checklist
+> - [ ] Rip a 4K YouTube link -> log shows `av1 2160p -> HEVC (hevc_nvenc)...`, final file is `.mp4`
+>   - Notes:
+> - [ ] Rip a 1080p-max YouTube link -> log says "software-decodes fine, no re-encode", no transcode runs
+>   - Notes:
+> - [ ] Rip an Instagram reel -> gallery-dl path, no probe/re-encode line at all
+>   - Notes:
+> - [ ] Play a 4K rip on the Pi 5 in Kodi -> smooth, no stutter
+>   - Notes:
+> - [ ] Cancel mid-re-encode -> stops cleanly, original file left intact
+>   - Notes:
+> - [ ] Untick "Kodi/Pi 5 mode" -> best quality downloaded with no re-encode
+>   - Notes:
+
 ## Build 2026-06-16--0220
 
 ### Changes

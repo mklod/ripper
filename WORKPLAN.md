@@ -39,6 +39,12 @@ installer + tracking docs, git repo.
 Live authenticated end-to-end test passed 2026-06-05: YouTube + Instagram rips
 with real cookies produced files.
 
+### Stage 5 -- Kodi / Pi 5 playback target -- COMPLETE
+Rips are now aimed at a specific playback target: Kodi on the rpi5. Best
+quality up to 4K, with an automatic HEVC re-encode for anything the Pi can't
+hardware-decode. Verified 2026-08-27 end-to-end, including live playback on the
+box at 1.01x real-time.
+
 ### Possible future -- TODO (not committed)
 - Per-collection subfolder output so big IG collections don't dump flat.
 - Optional MP3 audio-only mode for YouTube.
