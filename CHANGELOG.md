@@ -22,8 +22,11 @@
   time**, so the audio track is never re-encoded, and output lands in MP4
   (`--merge-output-format mp4` + `--remux-video mp4`, which also catches
   single-file downloads that never hit the merger).
-- HDR is preserved: colour primaries/transfer/matrix are carried across and the
-  encode switches to Main10 when the source is PQ/HLG.
+- **4K HDR preserved end-to-end** (this is the quality ceiling being targeted):
+  the format selector already prefers the HDR variant at a given resolution, and
+  the re-encode carries it across -- verified on a real 4K HDR10 rip,
+  vp9 Profile 2 / yuv420p10le / bt2020 / smpte2084 / bt2020nc + mastering
+  display metadata in, **hevc Main 10 with all of it intact** out.
 - Encoder is **NVENC when available**, falling back to libx265 on machines
   without an NVIDIA GPU.
 - The old **Force 1080p H.264 MP4** toggle is kept as an escape hatch for
@@ -36,6 +39,8 @@ container. The extension was an audio-container artifact, not a bad video pick.
 
 > [!warning] Testing Checklist
 > - [ ] Rip a 4K YouTube link -> log shows `av1 2160p -> HEVC (hevc_nvenc)...`, final file is `.mp4`
+>   - Notes:
+> - [ ] Rip a 4K **HDR** link -> log shows `... 2160p HDR -> HEVC`, and the TV switches into HDR on playback
 >   - Notes:
 > - [ ] Rip a 1080p-max YouTube link -> log says "software-decodes fine, no re-encode", no transcode runs
 >   - Notes:

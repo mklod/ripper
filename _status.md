@@ -115,6 +115,24 @@ is only possible via re-encode.**
   real-time). Decode is NOT the bottleneck (software AV1 ~187 fps), so
   `-hwaccel` was measured, made no difference, and was left out.
 
+### 4K HDR verified (2026-08-28) — this is the quality ceiling being targeted
+User's standard: "8k isn't real yet. 4kHDR == bestquality". Both halves checked:
+- **Selection:** yt-dlp's default sort already prefers the HDR variant at a given
+  resolution — two 4K HDR test videos both selected `dynamic_range=HDR10`
+  (vp9.2 fmt 337 and av01 fmt 701). No format-selector change needed.
+- **Survival through the re-encode:** ran the real pipeline on a 4K HDR10 rip.
+  Source `vp9 Profile 2 / yuv420p10le / bt2020 / smpte2084 / bt2020nc` with
+  mastering display metadata → output **`hevc Main 10`, identical pix_fmt and
+  colour tags, mastering display metadata preserved**. Detection log line read
+  `vp9 2160p HDR -> HEVC (hevc_nvenc)`.
+- `rpivid` advertises a 10-bit capture format (`NC30`), so Main10 hardware-decodes
+  on the Pi too.
+
+### Correction to the size trade-off
+Earlier note said HEVC output is larger than source. That's source-dependent, not
+universal: the 4K AV1 clip grew 110 → 169 MB, but the 4K HDR VP9 clip **shrank
+230 → 149 MB** (its source bitrate was much higher). Tunable via `HEVC_CQ`.
+
 ### Known trade-off (flagged to user)
 HEVC output is **larger than the AV1 source** (110 MB → 169 MB, ~1.5x) — that's
 inherent to AV1→HEVC. `\\murkyserver\murky4` is at **93% (1.7 TB free)**, so
@@ -123,3 +141,14 @@ heavy 4K ripping will eat into that. Tunable via `HEVC_CQ` in `ripper.pyw`.
 ### Next
 - Watch the first few real 4K rips for size/time in practice.
 - `--cookies-from-browser firefox` still deferred (unchanged).
+
+## 2026-08-28 — published to GitHub
+Repo pushed to **https://github.com/mklod/ripper** (public). Secret-scanned
+before the first push: no credentials, keys or IPs in tracked files; exported
+`cookies.txt` files are gitignored and runtime state lives in `%LOCALAPPDATA%`.
+
+### Taskbar pin — confirmed current
+The pinned shortcut targets `pythonw.exe "C:\Users\mklod\Ripper\ripper.pyw"`,
+which is byte-identical (md5 `b8114912eeb2235874025a186f83d66d`) to the NAS
+source. Deploying = copy `ripper.pyw` to `C:\Users\mklod\Ripper`; a running
+instance must be restarted to pick up a new build.

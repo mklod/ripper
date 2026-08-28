@@ -202,9 +202,21 @@ So the rule keys on the hardware, not on the file extension:
 | Instagram (gallery-dl) | never touched |
 
 Audio is never re-encoded: AAC is preferred at format-selection time and copied
-straight across. HDR survives -- colour primaries/transfer/matrix are carried
-over and the encode switches to Main10 for PQ/HLG sources (`rpivid` advertises
-a 10-bit capture format, so HDR hardware-decodes too).
+straight across.
+
+**4K HDR is the quality ceiling this targets, and it survives the re-encode.**
+yt-dlp's default sort already prefers the HDR variant at a given resolution, and
+the re-encode carries HDR across intact -- verified on a 4K HDR10 rip:
+
+| | Source (as downloaded) | Output (after re-encode) |
+|---|---|---|
+| codec | vp9 Profile 2 | **hevc Main 10** |
+| pix_fmt | yuv420p10le | yuv420p10le |
+| primaries / transfer / matrix | bt2020 / smpte2084 / bt2020nc | bt2020 / smpte2084 / bt2020nc |
+| mastering display metadata | present | **present** |
+
+`rpivid` advertises a 10-bit capture format (`NC30`), so Main10 hardware-decodes
+on the Pi as well.
 
 Encoding uses **NVENC** where available (`hevc_nvenc`), falling back to
 `libx265`. Measured on an RTX 4070 SUPER against a 4K30 AV1 source: presets
@@ -246,6 +258,7 @@ silently falling back to webm.
 | Output is `.webm` and you wanted `.mp4` | Shouldn't happen with **Kodi / Pi 5 mode** on -- it lands everything in MP4. If it's off, tick it (or the 1080p toggle). |
 | 4K rip stutters in Kodi on the Pi | It wasn't re-encoded -- check the log for a `-> HEVC` line. Only HEVC hardware-decodes on a Pi 5. |
 | Re-encode is slow | It runs ~1.2x real-time for 4K30 on an RTX 4070 SUPER; encoding is the bottleneck. Lower `HEVC_PRESET` (p5 -> p4) in `ripper.pyw` to trade a little quality for speed. |
+| Re-encoded file is bigger than expected | Depends on the source bitrate: a 110 MB 4K AV1 grew to 169 MB, but a 230 MB 4K HDR VP9 shrank to 149 MB. Raise `HEVC_CQ` in `ripper.pyw` to trade quality for size. |
 | yt-dlp fails on a site that used to work | Sites change constantly: `pip install -U yt-dlp gallery-dl`. |
 | "ffmpeg not found" in the log | Install ffmpeg and ensure it's on PATH. |
 
