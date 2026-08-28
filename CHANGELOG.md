@@ -38,20 +38,25 @@ landed as `.webm` because it paired it with Opus audio, which ships in a webm
 container. The extension was an audio-container artifact, not a bad video pick.
 
 > [!warning] Testing Checklist
-> - [ ] Rip a 4K YouTube link -> log shows `av1 2160p -> HEVC (hevc_nvenc)...`, final file is `.mp4`
->   - Notes:
-> - [ ] Rip a 4K **HDR** link -> log shows `... 2160p HDR -> HEVC`, and the TV switches into HDR on playback
->   - Notes:
-> - [ ] Rip a 1080p-max YouTube link -> log says "software-decodes fine, no re-encode", no transcode runs
->   - Notes:
+> - [x] Rip a 4K YouTube link -> log shows `av1 2160p -> HEVC (hevc_nvenc)...`, final file is `.mp4`
+>   - Notes: verified twice (4K30 AV1 SDR, 4K60 AV1 HDR). Output HEVC Main / Main 10 MP4.
+> - [x] Rip a 4K **HDR** link -> log shows `... 2160p HDR -> HEVC`, and the TV switches into HDR on playback
+>   - Notes: VERIFIED ON THE TV 2026-08-28. LG showed its HDR badge; user confirmed "got the HDR flag".
+>     Confirmed from the Pi too: HDMI-A-1 `Colorspace=10 (BT2020_YCC)`, `max bpc=12`, and a populated
+>     `HDR_OUTPUT_METADATA` blob decoding to eotf=2 (ST2084/PQ), Rec.2020 primaries, D65,
+>     1000-nit mastering display, MaxCLL 1000 / MaxFALL 280 -- i.e. the source's own mastering
+>     metadata, carried all the way through the re-encode and out over HDMI.
+> - [x] Rip a 1080p-max YouTube link -> log says "software-decodes fine, no re-encode", no transcode runs
+>   - Notes: decision path exercised against 6 real files in the Kodi folder (all h264 1080p/240p) --
+>     every one correctly skipped. Not yet run as a live 1080p rip.
 > - [ ] Rip an Instagram reel -> gallery-dl path, no probe/re-encode line at all
->   - Notes:
-> - [ ] Play a 4K rip on the Pi 5 in Kodi -> smooth, no stutter
->   - Notes:
+>   - Notes: not yet run. (Gated by `backend == "yt-dlp"`, so it can't fire, but untested live.)
+> - [x] Play a 4K rip on the Pi 5 in Kodi -> smooth, no stutter
+>   - Notes: 4K30 = 1.01x, 4K60 HDR = 1.00x, zero dropped/skipped frames, DRMPRIME hardware path.
 > - [ ] Cancel mid-re-encode -> stops cleanly, original file left intact
->   - Notes:
+>   - Notes: not yet tested.
 > - [ ] Untick "Kodi/Pi 5 mode" -> best quality downloaded with no re-encode
->   - Notes:
+>   - Notes: not yet tested.
 
 ## Build 2026-06-16--0220
 

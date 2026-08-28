@@ -152,3 +152,34 @@ The pinned shortcut targets `pythonw.exe "C:\Users\mklod\Ripper\ripper.pyw"`,
 which is byte-identical (md5 `b8114912eeb2235874025a186f83d66d`) to the NAS
 source. Deploying = copy `ripper.pyw` to `C:\Users\mklod\Ripper`; a running
 instance must be restarted to pick up a new build.
+
+## 2026-08-28--0015 — LIVE ON THE TV: 4K60 HDR verified end to end
+
+Ripped LG's own 4K HDR demo (`bON-KPiiNCk`, AV1 HDR10 2160p60) with the real
+app, Save-to pointed straight at the NAS Kodi folder — i.e. the actual workflow,
+not a lab setup — then played it on the box.
+
+- **Pipeline:** `av1 2160p HDR -> HEVC (hevc_nvenc)`. Output HEVC **Main 10**,
+  3840x2160 @ 59.94, yuv420p10le, bt2020 / smpte2084 / bt2020nc, 272 MB.
+- **Timing (SMB round trip included):** 102 s of 4K60 re-encoded in **112 s**
+  (~0.9x real-time). Downloading and re-encoding directly to/from the NAS works
+  fine — no need to stage locally.
+- **Playback:** 1.00x (14.9 s of video in 15.0 s wall), zero dropped/skipped
+  frames, opened via `DRMPRIME::Open - using decoder HEVC`.
+- **HDR CONFIRMED BY THE USER ON THE TV** — LG showed its HDR badge.
+- **And confirmed from the Pi side** via `modetest -M vc4 -c` on HDMI-A-1 while
+  playing: `Colorspace = 10 (BT2020_YCC)`, `max bpc = 12`, and a populated
+  `HDR_OUTPUT_METADATA` blob decoding to:
+  eotf **2 = SMPTE ST 2084 (PQ)**, Rec.2020 primaries (0.708/0.292,
+  0.170/0.797, 0.131/0.046), D65 white point, 1000-nit mastering display,
+  MaxCLL 1000 / MaxFALL 280 — the source's own mastering metadata, carried
+  through the re-encode and out over HDMI.
+
+### Benign log line to ignore
+`CDVDVideoCodecDRMPRIME::FilterOpen - avfilter_graph_config: Invalid argument
+(-22)` appears on EVERY playback on this build (H.264, HEVC and AV1 alike,
+including files that predate this work). Pre-existing, not caused by these rips.
+
+### Left on the NAS
+`LG 4K DEMO HDR 2018 (60FPS) ELBA [bON-KPiiNCk].mp4` is still in
+`youtube rips - watch later` — it's a genuine 4K HDR demo, keep or bin it.
