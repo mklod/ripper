@@ -197,9 +197,14 @@ So the rule keys on the hardware, not on the file extension:
 | Downloaded stream | What happens |
 |---|---|
 | HEVC, any resolution | kept as-is (hardware path) |
-| Anything `<=1080p` | kept as-is (CPU decode is fine; re-encoding would only lose quality) |
+| Anything within the **1080p pixel budget** (1920x1080 +10%) | kept as-is (CPU decode is fine; re-encoding would only lose quality) |
 | Anything else (4K AV1 / VP9 / H.264) | re-encoded to **HEVC MP4** |
 | Instagram (gallery-dl) | never touched |
+
+The budget is **total pixels, not height** — decode cost scales with pixel
+count. A 1080x1920 vertical clip has the same 2,073,600 pixels as 1080p
+landscape and is left alone; an earlier version of this rule compared height
+against 1080 and needlessly transcoded vertical video.
 
 Audio is never re-encoded: AAC is preferred at format-selection time and copied
 straight across.

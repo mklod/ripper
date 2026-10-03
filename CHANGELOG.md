@@ -4,6 +4,35 @@
 > [!tip] Queued for next build
 > - (empty)
 
+## Build 2026-10-02--1856
+
+### Changes
+- **Fixed: vertical videos were being re-encoded for no reason.** The Kodi/Pi 5
+  rule compared **height** against 1080, so a 1080x1920 vertical clip tripped it
+  — even though it has *exactly* the same pixel count as 1080p landscape and
+  decodes just as easily. It now compares **total pixels** against the 1080p
+  landscape frame (plus 10% slack for odd dimensions), so vertical and square
+  1080-class clips are left alone. Decode cost scales with pixels, not height.
+- **Log now prints real dimensions** (`vp9 1080x1920`) instead of a height
+  suffix (`vp9 1920p`), which read as "above 1080p" when it wasn't.
+
+### Found by
+A real 13-link run (`ripper log.txt`, 2026-10-02). 12/13 succeeded; of those,
+11 were correctly re-encoded and one — a 1080x1920 vertical video — was
+needlessly transcoded. Re-ripped it pristine afterwards.
+
+> [!warning] Testing Checklist
+> - [x] Vertical 1080x1920 rip -> log says "software-decodes fine, no re-encode", file untouched
+>   - Notes: verified live — ran a real 1080x1920 VP9 rip through `kodi_pass()`, byte-identical in and out.
+> - [x] Square 1080x1080 rip -> no re-encode
+>   - Notes: verified against the real file in the run (1,166,400 px, well under budget).
+> - [x] 1920x1440 / 2160x2160 / 3840x2160 -> still re-encoded
+>   - Notes: re-checked all 12 files from the run through the new rule; only the vertical one changed verdict.
+> - [ ] Rip an Instagram reel -> gallery-dl path, no probe/re-encode line at all
+>   - Notes: still not run.
+> - [ ] Cancel mid-re-encode -> stops cleanly, original file left intact
+>   - Notes: still not tested.
+
 ## Build 2026-08-27--2340
 
 ### Changes

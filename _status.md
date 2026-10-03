@@ -183,3 +183,56 @@ including files that predate this work). Pre-existing, not caused by these rips.
 ### Left on the NAS
 `LG 4K DEMO HDR 2018 (60FPS) ELBA [bON-KPiiNCk].mp4` is still in
 `youtube rips - watch later` — it's a genuine 4K HDR demo, keep or bin it.
+
+## 2026-10-02--1856 — real-run bug: vertical video needlessly re-encoded
+
+User handed over `ripper log.txt` from a real 13-link run (The Streets, 4K
+music videos + making-ofs). The pipeline worked — **12/13 ok**, the one failure
+being an age-gated video (`0caDHap3Nf4`, "Sign in to confirm your age"), which
+is expected: the only cookie file configured is `Dropbox/Reels/IG.txt`
+(Instagram), no YouTube cookies loaded.
+
+### The bug (found by reading the run, not by a test)
+`SW_SAFE_HEIGHT = 1080` compared **height**, so a **1080x1920 vertical** video
+was re-encoded — despite having *exactly* the same pixel count as 1080p
+landscape (2,073,600) and decoding just as easily on the Pi. It cost a
+generation of quality for nothing, which directly contradicts the "best
+quality, re-encode only if necessary" rule.
+
+**Fix:** compare **total pixels** against the 1080p landscape frame + 10% slack
+(`SW_SAFE_PIXELS = int(1920*1080*1.1)` = 2,280,960). Re-checked all 12 files
+from the run through the new rule — only the vertical one changes verdict:
+
+| file | WxH | px | vs 1080p | old rule | new rule |
+|---|---|---|---|---|---|
+| BRAVE ST ANDREW - THE STREETS | 1080x1080 | 1,166,400 | 0.56x | keep | keep |
+| BRAVE ST ANDREW (vertical) | 1080x1920 | 2,073,600 | 1.00x | **re-encode** | **keep** |
+| End of the Queue | 1920x1440 | 2,764,800 | 1.33x | re-encode | re-encode |
+| 3 Minutes to Midnight | 2160x2160 | 4,665,600 | 2.25x | re-encode | re-encode |
+| Bright Sunny Day | 3840x2024 | 7,772,160 | 3.75x | re-encode | re-encode |
+| Utopia / making-ofs | 3840x2160 | 8,294,400 | 4.00x | re-encode | re-encode |
+
+Also: the log line now prints **real dimensions** (`vp9 1080x1920`) instead of
+`vp9 1920p`, which misleadingly read as "above 1080p".
+
+### Verified live
+Ran a real 1080x1920 VP9 rip through `kodi_pass()`:
+`vp9 1080x1920 - software-decodes fine, no re-encode` — byte-identical in and
+out. Also re-ripped the affected video pristine (VP9 616 untouched, 33.6 MB)
+and swapped it in for the old second-generation HEVC transcode (63.6 MB) — so
+the file in `Downloads/the-streets` is now better quality AND half the size.
+
+### Incidental findings (no code change needed)
+- **Format 616 is YouTube's "Premium" 1080p tier** (5670k vs 1631k for standard
+  VP9 248, 1196k for AV1 399) and is **HLS/m3u8 only**. The selector picking it
+  is correct for "best quality" — don't add an https-only protocol preference,
+  it would silently downgrade to a third of the bitrate.
+- A transient **HTTP 403** hit the HLS fragments on one re-rip attempt; an
+  immediate retry succeeded. Not a code fault — the same format had downloaded
+  fine earlier in the day. A failed HLS run does leave an orphan `.fNNN.mp4`
+  partial in the output folder (that's yt-dlp's resume behaviour, left alone).
+
+### Next
+- Age-gated videos need a YouTube `cookies.txt` (incognito-export method, see
+  README). Only IG cookies are loaded right now.
+- Still untested: Instagram path end-to-end, cancel-mid-re-encode.

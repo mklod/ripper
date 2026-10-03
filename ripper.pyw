@@ -1,5 +1,5 @@
 # Ripper - one-click link downloader (yt-dlp + gallery-dl)
-# Last modified: 2026-08-27--2340
+# Last modified: 2026-10-02--1856
 #
 # Paste one or many links, click Rip. Instagram URLs route to gallery-dl
 # (handles reels, photos, carousels, profiles, stories); everything else
@@ -58,7 +58,13 @@ FORMAT_BEST_4K = ("bv*[height<=2160]+ba[ext=m4a]/bv*[height<=2160]+ba/"
 # from YouTube and also 4K H.264 from other sites, which the Pi 5 can't
 # hardware-decode either.
 KEEP_CODECS = {"hevc", "h265"}   # the only codec rpivid will accept
-SW_SAFE_HEIGHT = 1080            # CPU decode is comfortable up to here
+# "How hard is this to decode" is a function of TOTAL PIXELS, not height. The
+# first version of this rule compared height against 1080 and so re-encoded a
+# 1080x1920 vertical video -- which has exactly the same pixel count as 1080p
+# landscape and decodes just as easily (caught in a real 13-link run,
+# 2026-10-02). Budget is the 1080p landscape frame plus 10% slack for odd
+# dimensions, so vertical and square 1080-class clips are left alone.
+SW_SAFE_PIXELS = int(1920 * 1080 * 1.1)
 HEVC_CQ = 21          # NVENC constant-quality target (lower = bigger/better)
 HEVC_CRF = 20         # libx265 fallback quality
 # Measured on the RTX 4070 SUPER over a 4K30 AV1 source (2026-08-27): presets
@@ -462,7 +468,7 @@ class RipperApp:
                                                else "ffprobe")
             if cand.is_file():
                 probe_bin = str(cand)
-        fields = ("stream=codec_name,codec_type,height,"
+        fields = ("stream=codec_name,codec_type,width,height,"
                   "color_transfer,color_primaries,color_space")
         try:
             out = subprocess.run(
@@ -473,11 +479,12 @@ class RipperApp:
         except Exception as e:
             self.write(f"  ffprobe failed ({e}); leaving file as-is\n", "err")
             return None
-        info = {"vcodec": "", "acodec": "", "height": 0,
+        info = {"vcodec": "", "acodec": "", "width": 0, "height": 0,
                 "trc": "", "prim": "", "space": ""}
         for st in data.get("streams", []):
             if st.get("codec_type") == "video" and not info["vcodec"]:
                 info["vcodec"] = (st.get("codec_name") or "").lower()
+                info["width"] = int(st.get("width") or 0)
                 info["height"] = int(st.get("height") or 0)
                 info["trc"] = (st.get("color_transfer") or "").lower()
                 info["prim"] = (st.get("color_primaries") or "").lower()
@@ -531,15 +538,16 @@ class RipperApp:
             info = self.probe(src)
             if not info:
                 continue
-            if (info["vcodec"] in KEEP_CODECS
-                    or info["height"] <= SW_SAFE_HEIGHT):
+            pixels = info["width"] * info["height"]
+            dims = f"{info['width']}x{info['height']}"
+            if info["vcodec"] in KEEP_CODECS or pixels <= SW_SAFE_PIXELS:
                 why = ("hardware-decoded" if info["vcodec"] in KEEP_CODECS
                        else "software-decodes fine")
-                self.write(f"  {info['vcodec']} {info['height']}p - {why}, "
+                self.write(f"  {info['vcodec']} {dims} - {why}, "
                            f"no re-encode\n", "ok")
                 continue
             hdr = " HDR" if info["trc"] in HDR_TRANSFERS else ""
-            self.write(f"  {info['vcodec']} {info['height']}p{hdr} -> HEVC "
+            self.write(f"  {info['vcodec']} {dims}{hdr} -> HEVC "
                        f"({self.hevc_encoder})...\n", "info")
             self.set_status(f"re-encoding {src.name} -> HEVC...")
             tmp = src.with_name(src.stem + ".__hevc.mp4")
